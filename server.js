@@ -6,8 +6,28 @@ const FileRecord = require('./models/FileRecord');
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// Fixed CORS Middleware
+app.use(cors({
+  origin: '*', // or specify your frontend URL like 'http://localhost:3000'
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Added OPTIONS and other methods
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: false // Set to false when using origin: '*'
+}));
+
+// Additional CORS headers for extra compatibility
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
+
 app.use(express.json());
 
 // Health check endpoint
@@ -16,9 +36,22 @@ app.get('/health', (req, res) => {
 });
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URL, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(process.env.MONGODB_URL, { 
+  useNewUrlParser: true, 
+  useUnifiedTopology: true 
+})
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.error('MongoDB connection error:', err));
+
+// GET route for file records (this was missing!)
+app.get('/api/filerecords', async (req, res) => {
+  try {
+    const records = await FileRecord.find().limit(100); // Limit for performance
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Create a new file record (admin/data entry)
 app.post('/api/filerecords', async (req, res) => {
@@ -34,7 +67,7 @@ app.post('/api/filerecords', async (req, res) => {
 // Search for a file record (for your frontend form)
 app.post('/api/filerecords/search', async (req, res) => {
   const query = {};
-
+  
   if (req.body.fileNoParts === 'four') {
     query.department = req.body.department;
     query.year = req.body.year;
@@ -59,7 +92,7 @@ app.post('/api/filerecords/search', async (req, res) => {
     query.emiratesIdNumber = req.body.emiratesIdNumber;
     query.nationality4 = req.body.nationality4;
   }
-
+  
   try {
     const record = await FileRecord.findOne(query);
     if (!record) return res.status(404).json({ error: 'No record found' });
@@ -77,4 +110,8 @@ app.use((err, req, res, next) => {
 
 // Start the server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`)); 
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`API endpoint: http://localhost:${PORT}/api/filerecords`);
+});
